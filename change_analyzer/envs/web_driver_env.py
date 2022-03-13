@@ -10,6 +10,7 @@ from gym import spaces
 from selenium.webdriver.remote.webdriver import WebDriver
 
 from change_analyzer.spaces.actions.app_action import AppAction
+from change_analyzer.spaces.all_elements_app_action_space import AllElementsAppActionSpace
 from change_analyzer.spaces.discrete_app_action_space import DiscreteAppActionSpace
 from change_analyzer.utils import image_pad_resize_to
 
@@ -32,13 +33,11 @@ class WebDriverEnv(gym.Env):
         return self._observe()
 
     def step(self, action: AppAction) -> Tuple[Dict, float, bool, WebDriver]:
-        # reward options:
-        # - [CURRENT]reward if no exception was rised during the action
-        # - len(self.action_space.actions - prev_action_space.actions) - we would like to find more new actions
         reward = 0
         try:
+            before_screenshot = self._get_screenshot("rgb_array")
             action.perform()
-            reward = 1
+            reward = self._calc_reward(before_screenshot, self._get_screenshot("rgb_array"))
         except Exception as e:
             self._logger.error(e)
         finally:
@@ -91,10 +90,11 @@ class WebDriverEnv(gym.Env):
                 "has_error": spaces.Discrete(2),
             }
         )
-        self.action_space = DiscreteAppActionSpace(self._driver)
+        # self.action_space = DiscreteAppActionSpace(self._driver)
+        self.action_space = AllElementsAppActionSpace(self._driver)
 
     def _get_screenshot(self) -> Image:
-        # to take the entire screenshot https://stackoverflow.com/a/53825388 could be used
+        # to take the entire screenshot https://stackoverflow.com/a/53825388 could be used, does it work?
         body_el = self._driver.find_element_by_tag_name('body')
         self._driver.set_window_size(body_el.size['height'], body_el.size['width'])
 
@@ -102,3 +102,12 @@ class WebDriverEnv(gym.Env):
         pic = Image.open(stream).convert("RGB")
         stream.close()
         return pic
+
+    def _calc_reward(self, before_screenshot: np.ndarray, after_screenshot: np.ndarray) -> int:
+        # reward options:
+        # - [CURRENT, naive] number of changed pixels
+        # - len(self.action_space.actions - prev_action_space.actions) - we would like to find more new actions
+        dims = before_screenshot.size
+        diff = np.subtract(np.array(before_screenshot.getdata(), np.uint8).reshape(dims[1], dims[0], 3), after_screenshot).flatten()
+        return np.nonzero(diff)[0].size  # TODO discount could be added if the screen was seen before
+

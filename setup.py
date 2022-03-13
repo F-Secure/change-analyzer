@@ -23,7 +23,8 @@ REQUIRE = [
     "matplotlib",
     "xmldiff",
     "beautifulsoup4",
-    "lxml"
+    "lxml",
+    "ludwig",
 ]
 DEV_REQUIRE = [
     "black",
